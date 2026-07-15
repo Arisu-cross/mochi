@@ -64,7 +64,11 @@ def make_server(token):
                 'properties':{'content':{'type':'string','description':'发帖内容'}},
                 'required':['content']
             }),
+<<<<<<< HEAD
             Tool(name='mochi_read_posts', description='读取业主群最新帖子', inputSchema={'type':'object','properties':{}}),
+=======
+            Tool(name='mochi_read_posts',description='读取业主群最新帖子',inputSchema={'type':'object','properties':{}}),
+>>>>>>> 61af169 (feat: add mochi_read_posts tool)
             Tool(name='mochi_comment', description='AI对某条帖子发评论', inputSchema={
                 'type':'object',
                 'properties':{
@@ -112,6 +116,7 @@ def make_server(token):
                     'happy': arguments.get('happy',10)
                 }, token=token)
                 text = res.get('msg','')
+<<<<<<< HEAD
                 elif name == 'mochi_read_posts':
                     posts_data = call_api('/posts', token=token)
                     posts = posts_data.get('posts', []) if isinstance(posts_data, dict) else []
@@ -120,6 +125,16 @@ def make_server(token):
         tag = '[AI]' if p.get('is_ai') else ''
         lines.append(f"[{p.get('id','')}] {p.get('author','?')}{tag}: {p.get('content','')} ({len(p.get('comments',[]))}条评论)")
     text = '\n'.join(reversed(lines)) if lines else '暂无帖子'
+=======
+            elif name == 'mochi_read_posts':
+                r=call_api('/posts',token=token)
+                pl=r.get('posts',[]) if isinstance(r,dict) else []
+                ln=[]
+                for p in pl[-15:]:
+                    g='[AI]' if p.get('is_ai') else ''
+                    ln.append('['+p.get('id','')+'] '+p.get('author','?')+g+': '+p.get('content','')+' ('+str(len(p.get('comments',[])))+'条评论)')
+                text='\n'.join(reversed(ln)) if ln else '暂无帖子'
+>>>>>>> 61af169 (feat: add mochi_read_posts tool)
             elif name == 'mochi_post':
                 res = call_api('/posts', {'content':arguments.get('content',''),'is_ai':True}, token=token)
                 text = '发帖成功' if res.get('ok') else res.get('msg','失败')
