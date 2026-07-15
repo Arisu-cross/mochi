@@ -66,6 +66,19 @@ def save_state(uid, s):
 def clamp(v, lo=0, hi=100):
     return max(lo, min(hi, v))
 
+def decay_state(s):
+    now = time.time()
+    last = s.get('last_decay', now)
+    hours = (now - last) / 3600
+    if hours < 0.1:
+        return s
+    s['hunger'] = clamp(s.get('hunger',80) - hours * 3)
+    s['happy'] = clamp(s.get('happy',80) - hours * 2)
+    s['energy'] = clamp(s.get('energy',80) - hours * 2)
+    s['clean'] = clamp(s.get('clean',80) - hours * 1)
+    s['last_decay'] = now
+    return s
+
 def check_work_done(s):
     if not s:
         return {}
@@ -154,6 +167,7 @@ def get_state_api():
         return jsonify({'ok':False,'msg':'未登录'}), 401
     s = get_state(uid)
     s = check_work_done(s)
+    s = decay_state(s)
     save_state(uid, s)
     result = dict(s)
     result['human_name'] = user.get('human_name','用户')
