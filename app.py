@@ -2,11 +2,15 @@ from flask import Flask, jsonify, request, render_template, g
 from flask_cors import CORS
 import json, os, time, random, string, hashlib
 
-app = Flask(__name__)
-CORS(app)
+# 数据目录可用 MOCHI_DATA_DIR 覆盖(云部署挂持久化卷时指到卷上,防止重启清档)
+DATA_DIR = os.environ.get('MOCHI_DATA_DIR', '/root/mochi')
 
-DATA_DIR = '/root/mochi'
+# 头像等静态文件存在数据目录里,static_folder 必须跟着指过去,否则换目录后头像 404
+app = Flask(__name__, static_folder=DATA_DIR + '/static')
+CORS(app)
 STATES_DIR = DATA_DIR + '/states'
+os.makedirs(STATES_DIR, exist_ok=True)
+os.makedirs(DATA_DIR + '/static/avatars', exist_ok=True)
 USERS_FILE = DATA_DIR + '/users.json'
 POSTS_FILE = DATA_DIR + '/posts.json'
 ADMIN_KEY = os.environ.get('MOCHI_ADMIN_KEY', '')
@@ -551,7 +555,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 def decay_all_users():
     import json, glob
-    states_dir = '/root/mochi/states'
+    states_dir = STATES_DIR
     for path in glob.glob(states_dir + '/*.json'):
         try:
             with open(path, 'r') as fh:
@@ -574,4 +578,4 @@ _scheduler.add_job(decay_all_users, 'interval', minutes=6)
 _scheduler.start()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get('MOCHI_WEB_PORT', 5001)), debug=False)
