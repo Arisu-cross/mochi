@@ -15,11 +15,20 @@ from a2wsgi import WSGIMiddleware
 import app as game
 import mcp_server
 
-app = Starlette(routes=[
+starlette_app = Starlette(routes=[
     Route('/sse', endpoint=mcp_server.handle_sse),
     Mount('/messages/', app=mcp_server.logged_messages),
     Mount('/', app=WSGIMiddleware(game.app)),
-])
+], lifespan=mcp_server.lifespan)
+
+
+# /mcp 在 ASGI 顶层手工分流:starlette 的 Mount 对不带尾斜杠的精确路径匹配
+# 各版本行为不一,streamable-http 的客户端 URL 恰恰就是裸的 /mcp。
+async def app(scope, receive, send):
+    if scope['type'] == 'http' and (scope['path'] == '/mcp' or scope['path'].startswith('/mcp/')):
+        await mcp_server.handle_mcp(scope, receive, send)
+        return
+    await starlette_app(scope, receive, send)
 
 if __name__ == '__main__':
     import uvicorn

@@ -165,6 +165,44 @@ def _run_tool(name, arguments, token):
             text = f'错误：{e}'
         return [TextContent(type='text', text=text)]
 
+# ---- streamable-http(根治版传输)--------------------------------------------
+# SSE 靠一条常开长连接活着,云边缘节点会掐闲置连接,客户端(claude -p 常驻进程)
+# 又不会自动重连——表现为放几个小时后所有工具报错。streamable-http 每次调用都是
+# 独立 POST,加 stateless(不认会话)+ json_response(不流式),连服务器重启都免疫。
+# 按 token 懒建 manager:同一份服务进程可服务多个用户,互不串档。
+import contextlib
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+
+_managers = {}
+_managers_lock = asyncio.Lock()
+_lifespan_stack = None
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app):
+    global _lifespan_stack
+    async with contextlib.AsyncExitStack() as stack:
+        _lifespan_stack = stack
+        yield
+
+
+async def handle_mcp(scope, receive, send):
+    qs = urllib.parse.parse_qs(scope.get('query_string', b'').decode())
+    headers = {k.decode().lower(): v.decode() for k, v in scope.get('headers', [])}
+    token = headers.get('x-token') or (qs.get('token') or [''])[0]
+    async with _managers_lock:
+        mgr = _managers.get(token)
+        if mgr is None:
+            mgr = StreamableHTTPSessionManager(
+                app=make_server(token), json_response=True, stateless=True,
+            )
+            await _lifespan_stack.enter_async_context(mgr.run())
+            _managers[token] = mgr
+            log.info(f"[mcp] new manager token={token[:6]}…")
+    await mgr.handle_request(scope, receive, send)
+
+
+# ---- SSE(旧式传输,保留兼容)---------------------------------------------------
 sse = SseServerTransport('/messages/')
 
 async def handle_sse(request: Request):
