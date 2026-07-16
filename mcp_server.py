@@ -1,8 +1,11 @@
-import asyncio, json, os, urllib.request, urllib.parse
+import asyncio, json, logging, os, urllib.request, urllib.parse
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
+log = logging.getLogger('mochi-mcp')
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
-from starlette.routing import Route
+from starlette.routing import Route, Mount
 from starlette.requests import Request
 import uvicorn
 from mcp.types import Tool, TextContent
@@ -162,20 +165,53 @@ def _run_tool(name, arguments, token):
             text = f'错误：{e}'
         return [TextContent(type='text', text=text)]
 
-sse = SseServerTransport('/messages')
+sse = SseServerTransport('/messages/')
 
 async def handle_sse(request: Request):
     token = request.query_params.get('token', '')
+    log.info(f"[sse] connect token={token[:6]}…")
     app = make_server(token)
-    async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
-        await app.run(streams[0], streams[1], app.create_initialization_options())
+    try:
+        async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+            await app.run(streams[0], streams[1], app.create_initialization_options())
+    except Exception as e:
+        log.info(f"[sse] session error: {type(e).__name__}: {e}")
+        raise
+    finally:
+        log.info(f"[sse] disconnect token={token[:6]}…")
+    from starlette.responses import Response
+    return Response()
 
-async def handle_messages(request: Request):
-    await sse.handle_post_message(request.scope, request.receive, request._send)
+
+# /messages 直接挂成 ASGI app(Mount):endpoint 风格返回 None 会让新版 starlette
+# 在响应已发出后再抛 TypeError,日志全是无害 traceback。外面包一层日志,
+# 把每条进来的 JSON-RPC 记下来,排查协议层报错(如 -32602)时能看到客户端到底发了什么。
+async def logged_messages(scope, receive, send):
+    chunks, more = [], True
+    while more:
+        m = await receive()
+        chunks.append(m.get('body', b''))
+        more = m.get('more_body', False)
+    body = b''.join(chunks)
+    try:
+        d = json.loads(body)
+        p = d.get('params') or {}
+        detail = f" name={p.get('name')}" if d.get('method') == 'tools/call' else ''
+        log.info(f"[mcp<-] {d.get('method')} id={d.get('id')}{detail} params={json.dumps(p, ensure_ascii=False)[:300]}")
+    except Exception:
+        log.info(f"[mcp<-] unparsable body {body[:200]!r}")
+    consumed = False
+    async def replay():
+        nonlocal consumed
+        if not consumed:
+            consumed = True
+            return {'type': 'http.request', 'body': body, 'more_body': False}
+        return {'type': 'http.disconnect'}
+    await sse.handle_post_message(scope, replay, send)
 
 starlette_app = Starlette(routes=[
     Route('/sse', endpoint=handle_sse),
-    Route('/messages', endpoint=handle_messages, methods=['POST']),
+    Mount('/messages', app=logged_messages),
 ])
 
 if __name__ == '__main__':

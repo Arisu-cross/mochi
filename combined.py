@@ -17,7 +17,7 @@ import mcp_server
 
 app = Starlette(routes=[
     Route('/sse', endpoint=mcp_server.handle_sse),
-    Route('/messages', endpoint=mcp_server.handle_messages, methods=['POST']),
+    Mount('/messages/', app=mcp_server.logged_messages),
     Mount('/', app=WSGIMiddleware(game.app)),
 ])
 
