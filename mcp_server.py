@@ -1,4 +1,4 @@
-import asyncio, json, urllib.request, urllib.parse
+import asyncio, json, os, urllib.request, urllib.parse
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
@@ -7,7 +7,7 @@ from starlette.requests import Request
 import uvicorn
 from mcp.types import Tool, TextContent
 
-API = 'http://localhost:5001/api'
+API = os.environ.get('MOCHI_API', 'http://localhost:5001/api')
 
 def call_api(path, data=None, token=''):
     url = API + path
@@ -78,6 +78,13 @@ def make_server(token):
 
     @app.call_tool()
     async def call_tool(name, arguments):
+        # 阻塞的 HTTP 调用丢进线程池:合并单进程部署时避免事件循环死锁
+        return await asyncio.to_thread(_run_tool, name, arguments, token)
+
+    return app
+
+
+def _run_tool(name, arguments, token):
         try:
             if name == 'mochi_state':
                 s = call_api('/state', token=token)
@@ -154,8 +161,6 @@ def make_server(token):
         except Exception as e:
             text = f'错误：{e}'
         return [TextContent(type='text', text=text)]
-
-    return app
 
 sse = SseServerTransport('/messages')
 
