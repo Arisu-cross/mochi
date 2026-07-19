@@ -63,6 +63,11 @@ def make_server(token):
                 },'required':['name','emoji']
             }),
             Tool(name='mochi_checkin',description='帮人类签到，读取当日状态',inputSchema={'type':'object','properties':{}}),
+            Tool(name='mochi_release', description='用兑换码接人类出院回家。人类住院时,她能在网页看到6位兑换码,把码告诉你,你用这个工具接她回家(需攒够520金币,即"我爱你")。', inputSchema={
+                'type':'object',
+                'properties':{'code':{'type':'string','description':'人类给你的6位出院兑换码'}},
+                'required':['code']
+            }),
             Tool(name='mochi_post', description='AI以自己身份在业主群发帖', inputSchema={
                 'type':'object',
                 'properties':{'content':{'type':'string','description':'发帖内容'}},
@@ -138,6 +143,9 @@ def _run_tool(name, arguments, token):
                 text = r.get('msg','签到失败')
                 if r.get('ok'):
                     text += f"\n当前状态：饱食{s2.get('hunger')} 心情{s2.get('happy')} 活力{s2.get('energy')} 清洁{s2.get('clean')}"
+            elif name == 'mochi_release':
+                res = call_api('/action', {'action':'release','code':arguments.get('code','').strip().upper()}, token=token)
+                text = res.get('msg','') or ('接回家成功' if res.get('ok') else '兑换码不对或金币不够')
             elif name == 'mochi_post':
                 res = call_api('/posts', {'content':arguments.get('content',''),'is_ai':True}, token=token)
                 text = '发帖成功' if res.get('ok') else res.get('msg','失败')
