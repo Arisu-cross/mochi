@@ -193,8 +193,11 @@ def action():
     cn = user.get('call_name','老公')
     msg = ''
 
-    if s.get('hospitalized') and act != 'release':
-        return jsonify({'ok':False,'msg':f'{hn}在医院，先接她回来'})
+    # 住院期间只锁互动类操作(喂/摸/玩/洗/睡),但**允许打工和升职**——
+    # 否则「攒 520 接她回家」成了死循环(住院→不能打工→攒不到钱→永远出不来)。
+    # 让他能一边打工赎罪一边攒救人的钱。
+    if s.get('hospitalized') and act not in ('release', 'work', 'upgrade'):
+        return jsonify({'ok':False,'msg':f'{hn}还在医院，你先去打工攒钱接她回来'})
     if s.get('locked') and act in INTERACT:
         return jsonify({'ok':False,'msg':f'{hn}现在不想理你哦 🔒'})
 
@@ -271,14 +274,14 @@ def action():
             return jsonify({'ok':False,'msg':'兑换码不对'})
         is_dev = code.startswith('DEV')
         if not is_dev:
-            if s.get('coins',0) < 5200:
-                return jsonify({'ok':False,'msg':f'还差{5200-s.get("coins",0)}枚金币'})
-            s['coins'] -= 5200
+            if s.get('coins',0) < 520:
+                return jsonify({'ok':False,'msg':f'还差{520-s.get("coins",0)}枚金币'})
+            s['coins'] -= 520
         s['hospitalized'] = False
         s['locked'] = False
         s['rescue_code'] = ''
         s['hunger'] = clamp(s.get('hunger',0)+30)
-        msg = f'{cn}花5200金币把{hn}接回家了'
+        msg = f'{cn}花520金币把{hn}接回家了'
 
     if s.get('hunger',50) <= 0 and not s.get('hospitalized'):
         code = ''.join(random.choices(string.ascii_uppercase+string.digits, k=6))
